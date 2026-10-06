@@ -18,6 +18,11 @@
 int score = 0;
 int difficulty = 25;
 
+constexpr float horizontal_cage_increase = 10.0f;
+float cage_x = 25.0f * horizontal_cage_increase;
+float cage_y = 25.0f * horizontal_cage_increase;
+float cage_z = 12.5f;
+
 std::random_device rd;
 std::mt19937 gen(rd());
 
@@ -86,7 +91,7 @@ std::vector<PlanetData> generate_level() {
 		PlanetData planet {};
 		planet.type = asteroid;
 		planet.radius = std::uniform_real_distribution<float>(1.0f, 3.0f)(gen);
-		planet.tentative_pos = glm::vec3(std::uniform_real_distribution<float>(-25.0f + planet.radius, 25.0f - planet.radius)(gen), std::uniform_real_distribution<float>(-25.0f + planet.radius, 25.0f - planet.radius)(gen), std::uniform_real_distribution<float>(-12.5f + planet.radius, 12.5f - planet.radius)(gen));
+		planet.tentative_pos = glm::vec3(std::uniform_real_distribution<float>(-cage_x + planet.radius, cage_x - planet.radius)(gen), std::uniform_real_distribution<float>(-cage_y + planet.radius, cage_y - planet.radius)(gen), std::uniform_real_distribution<float>(-cage_z + planet.radius, cage_z - planet.radius)(gen));
 		for (PlanetData &other : level) {
 			float min_dist = planet.radius + other.radius;
 			if (glm::distance(planet.tentative_pos, other.tentative_pos) < min_dist) {
@@ -140,20 +145,19 @@ void make_level(PlayMode &play_mode) {
 	}
 }
 
+Scene::Transform *rocket = nullptr;
+Scene::Transform *cage = nullptr;
+
 PlayMode::PlayMode() : scene(*cage_scene) {
 	//get pointers to leg for convenience:
-	// for (auto &transform : scene.transforms) {
-	// 	if (transform.name == "Hip.FL") hip = &transform;
-	// 	else if (transform.name == "UpperLeg.FL") upper_leg = &transform;
-	// 	else if (transform.name == "LowerLeg.FL") lower_leg = &transform;
-	// }
-	// if (hip == nullptr) throw std::runtime_error("Hip not found.");
-	// if (upper_leg == nullptr) throw std::runtime_error("Upper leg not found.");
-	// if (lower_leg == nullptr) throw std::runtime_error("Lower leg not found.");
+	for (auto &transform : scene.transforms) {
+		if (transform.name == "Rocket") rocket = &transform;
+		else if (transform.name == "Cage") cage = &transform;
+	}
+	if (rocket == nullptr) throw std::runtime_error("rocket not found.");
+	if (cage == nullptr) throw std::runtime_error("cage leg not found.");
 
-	// hip_base_rotation = hip->rotation;
-	// upper_leg_base_rotation = upper_leg->rotation;
-	// lower_leg_base_rotation = lower_leg->rotation;
+	cage->scale = glm::vec3(horizontal_cage_increase, horizontal_cage_increase, 1.0f);
 
 	//get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
@@ -210,9 +214,6 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 	return false;
 }
 
-float cage_x = 25.0f;
-float cage_y = 25.0f;
-float cage_z = 12.5f;
 void PlayMode::update(float elapsed) {
 
 	for (PlanetData &planet : planet_data) {
@@ -261,6 +262,9 @@ void PlayMode::update(float elapsed) {
 			planet2.velocity += approach * normal;
 		}
 	}
+
+	glm::vec3 forward = rocket->rotation * glm::vec3(-1.0f, 0.0f, 0.0f);
+	rocket->position += forward * elapsed * 3.0f;
 
 	//reset button press counters:
 	left.downs = 0;
