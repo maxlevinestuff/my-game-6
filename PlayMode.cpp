@@ -16,13 +16,18 @@
 #include <vector>
 
 int score = 0;
-int difficulty = 300;
+int difficulty = 1000;
+constexpr float velocity_range = 30.0f;
+float rocket_speed = 250.0f;
 
-constexpr float horizontal_cage_increase = 10.0f;
-constexpr float vertical_cage_increase = 5.0f;
+constexpr float horizontal_cage_increase = 100.0f;
+constexpr float vertical_cage_increase = 40.0f;
 float cage_x = 25.0f * horizontal_cage_increase;
 float cage_y = 25.0f * horizontal_cage_increase;
 float cage_z = 25.0f * vertical_cage_increase;
+
+float radius_min = 20.0f;
+float radius_max = 150.0f;
 
 std::random_device rd;
 std::mt19937 gen(rd());
@@ -91,7 +96,7 @@ std::vector<PlanetData> generate_level() {
 		attempts++;
 		PlanetData planet {};
 		planet.type = asteroid;
-		planet.radius = std::uniform_real_distribution<float>(4.0f, 8.0f)(gen);
+		planet.radius = std::uniform_real_distribution<float>(radius_min, radius_max)(gen);
 		planet.tentative_pos = glm::vec3(std::uniform_real_distribution<float>(-cage_x + planet.radius, cage_x - planet.radius)(gen), std::uniform_real_distribution<float>(-cage_y + planet.radius, cage_y - planet.radius)(gen), std::uniform_real_distribution<float>(-cage_z + planet.radius, cage_z - planet.radius)(gen));
 		for (PlanetData &other : level) {
 			float min_dist = planet.radius + other.radius;
@@ -127,7 +132,6 @@ void spawn_planet(PlayMode &play_mode, PlanetData &planetData) {
 	planetData.transform->position = planetData.tentative_pos;
 	planetData.transform->scale = glm::vec3(planetData.radius);
 	//planetData.radius = std::uniform_real_distribution<float>(0.6f, 2.0f)(gen);
-	constexpr float velocity_range = 5.0f;
 	planetData.velocity = glm::vec3(std::uniform_real_distribution<float>(-velocity_range, velocity_range)(gen), std::uniform_real_distribution<float>(-velocity_range, velocity_range)(gen), std::uniform_real_distribution<float>(-velocity_range, velocity_range)(gen));
 	spawned_index++;
 }
@@ -149,12 +153,14 @@ void make_level(PlayMode &play_mode) {
 
 Scene::Transform *rocket = nullptr;
 Scene::Transform *cage = nullptr;
+Scene::Transform *bullet = nullptr;
 
 PlayMode::PlayMode() : scene(*cage_scene) {
 	//get pointers to leg for convenience:
 	for (auto &transform : scene.transforms) {
 		if (transform.name == "Rocket") rocket = &transform;
 		else if (transform.name == "Cage") cage = &transform;
+		else if (transform.name == "Bullet") bullet = &transform;
 	}
 	if (rocket == nullptr) throw std::runtime_error("rocket not found.");
 	if (cage == nullptr) throw std::runtime_error("cage leg not found.");
@@ -196,6 +202,10 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			down.downs += 1;
 			down.pressed = true;
 			return true;
+		} else if (evt.key.key == SDLK_SPACE) {
+			space.downs += 1;
+			space.pressed = true;
+			return true;
 		}
 	} else if (evt.type == SDL_EVENT_KEY_UP) {
 		if (evt.key.key == SDLK_LEFT) {
@@ -210,10 +220,20 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		} else if (evt.key.key == SDLK_DOWN) {
 			down.pressed = false;
 			return true;
+		} else if (evt.key.key == SDLK_SPACE) {
+			space.pressed = false;
+			return true;
 		}
 	}
 
 	return false;
+}
+
+void lose(PlayMode &play_mode) {
+	make_level(play_mode);
+	score = 0;
+	rocket->position = glm::vec3(0);
+	rocket->rotation = glm::quat(1,0,0,0);
 }
 
 float z_velocity = 0.0f;
@@ -261,10 +281,71 @@ void PlayMode::update(float elapsed) {
 				continue;
 			glm::vec3 normal = (pos1 - pos2) / dist;
 			float approach = glm::dot(planet1.velocity - planet2.velocity, normal);
-			planet1.velocity -= approach * normal;
-			planet2.velocity += approach * normal;
+			if (approach < 0.0f) {
+				planet1.velocity -= approach * normal;
+				planet2.velocity += approach * normal;
+			}
 		}
 	}
+
+	float rocket_radius = 1.0f;
+	if (rocket->position.x > (cage_x - rocket_radius)) {
+		lose(*this);
+	}
+	if (rocket->position.x < -(cage_x - rocket_radius)) {
+		lose(*this);
+	}
+
+	if (rocket->position.y > (cage_y - rocket_radius)) {
+		lose(*this);
+	}
+	if (rocket->position.y < -(cage_y - rocket_radius)) {
+		lose(*this);
+	}
+
+	if (rocket->position.z > (cage_z - rocket_radius)) {
+		lose(*this);
+	}
+	if (rocket->position.z < -(cage_z - rocket_radius)) {
+		lose(*this);
+	}
+
+	for (int i = 0; i < planet_data.size(); i++) {
+		PlanetData &planet = planet_data[i];
+		glm::vec3 &pos1 = planet.transform->position;
+		glm::vec3 &pos2 = rocket->position;
+		float dist = glm::distance(pos1, pos2);
+		if (dist > (planet.radius + rocket_radius))
+			continue;
+		else {
+			lose(*this);
+			break;
+		}
+	}
+
+	// float bullet_radius = 1.0f;
+	// for (int i = 0; i < planet_data.size(); i++) {
+	// 	PlanetData &planet = planet_data[i];
+	// 	glm::vec3 &pos1 = planet.transform->position;
+	// 	glm::vec3 pos2 = bullet->make_world_from_local() * glm::vec4(0,0,0,1);
+	// 	float dist = glm::distance(pos1, pos2);
+	// 	if (dist > (planet.radius + bullet_radius) || bullet->position.x == 0)
+	// 		continue;
+	// 	else {
+	// 		score++;
+	// 		planet.radius -= 25;
+	// 		if (planet.radius < radius_min)
+	// 			planet.radius = radius_min;
+	// 		planet.transform->scale = glm::vec3(planet.radius);
+	// 		bullet->position = glm::vec3(0);
+	// 	}
+	// }
+
+	if (space.pressed) {
+		bullet->position = glm::vec3(0);
+	}
+	bullet->position += glm::vec3(-1,0,0) * elapsed * (5.0f + rocket_speed);
+	bullet->scale = glm::vec3(std::uniform_real_distribution<float>(0.5f, 3.5f)(gen));
 
 	float turn_speed = 1.0f;
 	if (left.pressed) {
@@ -293,7 +374,7 @@ void PlayMode::update(float elapsed) {
 	rocket->rotation = rocket->rotation * glm::angleAxis(z_velocity, glm::vec3(0.0f, 1.0f, 0.0f));
 
 	glm::vec3 forward = rocket->rotation * glm::vec3(-1.0f, 0.0f, 0.0f);
-	rocket->position += forward * elapsed * 20.0f;
+	rocket->position += forward * elapsed * rocket_speed;
 
 	//reset button press counters:
 	left.downs = 0;
