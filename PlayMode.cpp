@@ -16,7 +16,7 @@
 #include <vector>
 
 int score = 0;
-int difficulty = 5;
+int difficulty = 25;
 
 std::random_device rd;
 std::mt19937 gen(rd());
@@ -32,6 +32,7 @@ struct PlanetData {
 	glm::vec3 velocity;
 	float radius;
 };
+int spawned_index = 0;
 std::vector<PlanetData> planet_data;
 
 std::array<GLuint, PLANET_COUNT> planet_meshes_for_lit_color_texture_program = {};
@@ -121,12 +122,21 @@ void spawn_planet(PlayMode &play_mode, PlanetData &planetData) {
 	planetData.transform->scale = glm::vec3(planetData.radius);
 	//planetData.radius = std::uniform_real_distribution<float>(0.6f, 2.0f)(gen);
 	planetData.velocity = glm::vec3(std::uniform_real_distribution<float>(-1.0f, 1.0f)(gen), std::uniform_real_distribution<float>(-1.0f, 1.0f)(gen), std::uniform_real_distribution<float>(-1.0f, 1.0f)(gen));
+	spawned_index++;
 }
 
 void make_level(PlayMode &play_mode) {
-	planet_data = generate_level();
-	for (PlanetData &planet: planet_data) {
-		spawn_planet(play_mode, planet);
+	std::vector<PlanetData> level = generate_level();
+	for (int i = 0; i < level.size(); i++) {
+		if (i < planet_data.size()) {
+			PlanetData &planet = planet_data[i];
+			planet.radius = level[i].radius;
+			planet.transform->position = planet.tentative_pos;
+			planet.transform->scale = glm::vec3(planet.radius);
+		} else {
+			spawn_planet(play_mode, level[i]);
+			planet_data.push_back(level[i]);
+		}
 	}
 }
 
@@ -151,6 +161,7 @@ PlayMode::PlayMode() : scene(*cage_scene) {
 
 	//spawn_planet(*this, life);
 	//spawn_planet(*this, asteroid);
+	make_level(*this);
 	make_level(*this);
 }
 
@@ -199,24 +210,57 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 	return false;
 }
 
+float cage_x = 25.0f;
+float cage_y = 25.0f;
+float cage_z = 12.5f;
 void PlayMode::update(float elapsed) {
 
-	//slowly rotates through [0,1):
-	// wobble += elapsed / 10.0f;
-	// wobble -= std::floor(wobble);
+	for (PlanetData &planet : planet_data) {
+		glm::vec3 &pos = planet.transform->position;
+		pos += planet.velocity * elapsed;
+		if (pos.x > (cage_x - planet.radius)) {
+			pos.x = cage_x - planet.radius;
+			planet.velocity.x = -planet.velocity.x;
+		}
+		if (pos.x < -(cage_x - planet.radius)) {
+			pos.x = -(cage_x - planet.radius);
+			planet.velocity.x = -planet.velocity.x;
+		}
 
-	// hip->rotation = hip_base_rotation * glm::angleAxis(
-	// 	glm::radians(5.0f * std::sin(wobble * 2.0f * float(M_PI))),
-	// 	glm::vec3(0.0f, 1.0f, 0.0f)
-	// );
-	// upper_leg->rotation = upper_leg_base_rotation * glm::angleAxis(
-	// 	glm::radians(7.0f * std::sin(wobble * 2.0f * 2.0f * float(M_PI))),
-	// 	glm::vec3(0.0f, 0.0f, 1.0f)
-	// );
-	// lower_leg->rotation = lower_leg_base_rotation * glm::angleAxis(
-	// 	glm::radians(10.0f * std::sin(wobble * 3.0f * 2.0f * float(M_PI))),
-	// 	glm::vec3(0.0f, 0.0f, 1.0f)
-	// );
+		if (pos.y > (cage_y - planet.radius)) {
+			pos.y = cage_y - planet.radius;
+			planet.velocity.y = -planet.velocity.y;
+		}
+		if (pos.y < -(cage_y - planet.radius)) {
+			pos.y = -(cage_y - planet.radius);
+			planet.velocity.y = -planet.velocity.y;
+		}
+
+		if (pos.z > (cage_z - planet.radius)) {
+			pos.z = cage_z - planet.radius;
+			planet.velocity.z = -planet.velocity.z;
+		}
+		if (pos.z < -(cage_z - planet.radius)) {
+			pos.z = -(cage_z - planet.radius);
+			planet.velocity.z = -planet.velocity.z;
+		}
+	}
+
+	for (int i = 0; i < planet_data.size(); i++) {
+		for (int j = i + 1; j < planet_data.size(); j++) {
+			PlanetData &planet1 = planet_data[i];
+			PlanetData &planet2 = planet_data[j];
+			glm::vec3 &pos1 = planet_data[i].transform->position;
+			glm::vec3 &pos2 = planet_data[j].transform->position;
+			float dist = glm::distance(pos1, pos2);
+			if (dist > (planet1.radius + planet2.radius))
+				continue;
+			glm::vec3 normal = (pos1 - pos2) / dist;
+			float approach = glm::dot(planet1.velocity - planet2.velocity, normal);
+			planet1.velocity -= approach * normal;
+			planet2.velocity += approach * normal;
+		}
+	}
 
 	//reset button press counters:
 	left.downs = 0;
