@@ -1,4 +1,4 @@
-# (TODO: your game's title)
+# Asteroid Miner
 
 Author: Max Levine
 

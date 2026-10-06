@@ -323,28 +323,28 @@ void PlayMode::update(float elapsed) {
 		}
 	}
 
-	// float bullet_radius = 1.0f;
-	// for (int i = 0; i < planet_data.size(); i++) {
-	// 	PlanetData &planet = planet_data[i];
-	// 	glm::vec3 &pos1 = planet.transform->position;
-	// 	glm::vec3 pos2 = bullet->make_world_from_local() * glm::vec4(0,0,0,1);
-	// 	float dist = glm::distance(pos1, pos2);
-	// 	if (dist > (planet.radius + bullet_radius) || bullet->position.x == 0)
-	// 		continue;
-	// 	else {
-	// 		score++;
-	// 		planet.radius -= 25;
-	// 		if (planet.radius < radius_min)
-	// 			planet.radius = radius_min;
-	// 		planet.transform->scale = glm::vec3(planet.radius);
-	// 		bullet->position = glm::vec3(0);
-	// 	}
-	// }
+	float bullet_radius = 1.0f;
+	for (int i = 0; i < planet_data.size(); i++) {
+		PlanetData &planet = planet_data[i];
+		glm::vec3 &pos1 = planet.transform->position;
+		glm::vec3 pos2 = bullet->make_world_from_local() * glm::vec4(0,0,0,1);
+		float dist = glm::distance(pos1, pos2);
+		if (dist > (planet.radius + bullet_radius) || bullet->position.x == 0)
+			continue;
+		else {
+			score++;
+			planet.radius -= 25;
+			if (planet.radius < radius_min)
+				planet.radius = radius_min;
+			planet.transform->scale = glm::vec3(planet.radius);
+			bullet->position = glm::vec3(0);
+		}
+	}
 
 	if (space.pressed) {
 		bullet->position = glm::vec3(0);
 	}
-	bullet->position += glm::vec3(-1,0,0) * elapsed * (5.0f + rocket_speed);
+	bullet->position += glm::vec3(-1,0,-0.4f) * elapsed * (5.0f + rocket_speed);
 	bullet->scale = glm::vec3(std::uniform_real_distribution<float>(0.5f, 3.5f)(gen));
 
 	float turn_speed = 1.0f;
