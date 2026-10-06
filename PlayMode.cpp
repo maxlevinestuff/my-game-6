@@ -13,8 +13,10 @@
 #include <random>
 #include <string>
 #include <array>
+#include <vector>
 
 int score = 0;
+int difficulty = 5;
 
 std::random_device rd;
 std::mt19937 gen(rd());
@@ -26,10 +28,11 @@ enum PlanetType {
 struct PlanetData {
 	PlanetType type;
 	Scene::Transform *transform;
+	glm::vec3 tentative_pos;
 	glm::vec3 velocity;
 	float radius;
 };
-std::deque<PlanetData> planet_data;
+std::vector<PlanetData> planet_data;
 
 std::array<GLuint, PLANET_COUNT> planet_meshes_for_lit_color_texture_program = {};
 
@@ -72,8 +75,33 @@ Load< Scene > cage_scene(LoadTagDefault, []() -> Scene const * {
 	});
 });
 
-void spawn_planet(PlayMode &play_mode, PlanetType type) {
-	Mesh const &mesh = (*planet_meshes)[type].lookup("Asteroid");
+std::vector<PlanetData> generate_level() {
+	start_over:
+	std::vector<PlanetData> level;
+	for (int i = 0; i < difficulty; i++) {
+		int attempts = 0;
+		replace:
+		attempts++;
+		PlanetData planet {};
+		planet.type = asteroid;
+		planet.radius = std::uniform_real_distribution<float>(1.0f, 3.0f)(gen);
+		planet.tentative_pos = glm::vec3(std::uniform_real_distribution<float>(-25.0f + planet.radius, 25.0f - planet.radius)(gen), std::uniform_real_distribution<float>(-25.0f + planet.radius, 25.0f - planet.radius)(gen), std::uniform_real_distribution<float>(-12.5f + planet.radius, 12.5f - planet.radius)(gen));
+		for (PlanetData &other : level) {
+			float min_dist = planet.radius + other.radius;
+			if (glm::distance(planet.tentative_pos, other.tentative_pos) < min_dist) {
+				if (attempts > 20)
+					goto start_over;
+				else
+					goto replace;
+			}
+		}
+		level.push_back(planet);
+	}
+	return level;
+}
+
+void spawn_planet(PlayMode &play_mode, PlanetData &planetData) {
+	Mesh const &mesh = (*planet_meshes)[planetData.type].lookup("Asteroid");
 
 	play_mode.scene.transforms.emplace_back();
 	Scene::Transform &transform = play_mode.scene.transforms.back();
@@ -83,18 +111,23 @@ void spawn_planet(PlayMode &play_mode, PlanetType type) {
 
 	drawable.pipeline = lit_color_texture_program_pipeline;
 
-	drawable.pipeline.vao = planet_meshes_for_lit_color_texture_program[type];
+	drawable.pipeline.vao = planet_meshes_for_lit_color_texture_program[planetData.type];
 	drawable.pipeline.type = mesh.type;
 	drawable.pipeline.start = mesh.start;
 	drawable.pipeline.count = mesh.count;
 
-	PlanetData planetData;
-	planetData.type = type;
 	planetData.transform = &transform;
-	planetData.radius = std::uniform_real_distribution<float>(0.6f, 2.0f)(gen);
+	planetData.transform->position = planetData.tentative_pos;
+	planetData.transform->scale = glm::vec3(planetData.radius);
+	//planetData.radius = std::uniform_real_distribution<float>(0.6f, 2.0f)(gen);
 	planetData.velocity = glm::vec3(std::uniform_real_distribution<float>(-1.0f, 1.0f)(gen), std::uniform_real_distribution<float>(-1.0f, 1.0f)(gen), std::uniform_real_distribution<float>(-1.0f, 1.0f)(gen));
+}
 
-	planet_data.emplace_back(planetData);
+void make_level(PlayMode &play_mode) {
+	planet_data = generate_level();
+	for (PlanetData &planet: planet_data) {
+		spawn_planet(play_mode, planet);
+	}
 }
 
 PlayMode::PlayMode() : scene(*cage_scene) {
@@ -117,6 +150,8 @@ PlayMode::PlayMode() : scene(*cage_scene) {
 	camera = &scene.cameras.front();
 
 	//spawn_planet(*this, life);
+	//spawn_planet(*this, asteroid);
+	make_level(*this);
 }
 
 PlayMode::~PlayMode() {
